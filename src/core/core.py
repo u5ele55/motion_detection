@@ -13,12 +13,14 @@ class Core:
         grayscaled_window = FrameDemonstration('Grayscaled stream')
 
         ret, frame = video.next_frame()
-        height, width = frame.shape[:2]
         
+        if not ret:
+            raise RuntimeError("Cannot access video stream")
+        
+        height, width = frame.shape[:2]
         print("Video resolution: ", height, width)
 
         min_area = 24 * 32
-
         md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=5)
 
         while True:

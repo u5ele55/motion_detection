@@ -4,15 +4,38 @@ from collections import deque
 from utilities.geometry import *
 
 class CVMotionDetector(IMotionDetector):
-    def __init__(self, height: int, width: int, *, capacity: int = 10, min_area: int = 50, dilation: int = 7, threshold: int = 15):
+    def __init__(self, height: int, width: int, *, capacity: int = 10, min_area: int = 50, dilation: int = 7, threshold: int = 15, max_deviation: float = 0):
+        '''
+
+        Parameters 
+        ----------
+        height : int
+            height of a frame
+        width : int
+            width of a frame
+        capacity : int
+            quantity of previous frames which are to used detect motion on a new frame
+        min_area : int
+            minimal area of an object to consider
+        dilation : int
+            dilation kernel size that used on frame difference
+        threshold : int
+            minimal brightness of object in frame difference to consider
+        max_deviation : int
+            maximal deviation of the center of an object relatively to its rectangle borders compared to previous frame. 
+            initialize as `-1` to disable this feature.
+        '''
         self.frame_pool = deque([]) 
         self.pool_sum = np.zeros((height, width))
-        self.min_area = min_area
-        self.capacity = capacity
-        self.dilation = dilation
+
+        self.min_area  = min_area
+        self.capacity  = capacity
+        self.dilation  = dilation
         self.threshold = threshold
+        self.centers   = []
+        self.max_deviation = max_deviation
     
-    def detect_motion(self, frame: np.ndarray, return_processed_frame: bool = False) -> np.ndarray:
+    def detect_motion(self, frame: np.ndarray, return_processed_frame: bool = False):
         frame = cv2.GaussianBlur(frame, ksize=(5,5), sigmaX=0)
 
         if len(self.frame_pool) != self.capacity:
@@ -45,10 +68,17 @@ class CVMotionDetector(IMotionDetector):
         mask = [True] * len(result)
 
         for i in range(len(result)):
+            if not mask[i]: 
+                continue
             for j in range(i+1, len(result)):
                 if mask[j] and Geometry.contains(result[i], result[j]):
                     mask[j] = False
         result = np.array([result[i] for i in range(len(result)) if mask[i]])
+        if self.centers:
+            # check if centers lying inside rectangles from `result` 
+            a = 1
+        self.centers = [((rect[0] + rect[2])/2, (rect[1] + rect[3])/2) for rect in result] 
+        
         if return_processed_frame:
             return result, thresh_frame
         return result
