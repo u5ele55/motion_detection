@@ -17,3 +17,6 @@ class Geometry:
         x1,y1, x2,y2 = rect
 
         return x1 <= x <= x2 and y1 <= y <= y2
+    @staticmethod
+    def get_center(rect: np.ndarray | list):
+        return ((rect[0] + rect[2])/2, (rect[1] + rect[3])/2)

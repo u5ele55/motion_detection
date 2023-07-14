@@ -1,13 +1,13 @@
 import cv2
 from videocapture.CameraCapturer import CameraCapturer
 from videocapture.VideofileCapturer import VideofileCapturer
-from core.FrameDemonstration import FrameDemonstration
+from visual.FrameDemonstration import FrameDemonstration
 from motion_detection.opencv.MotionDetector import *
 
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
+        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
         #video = CameraCapturer(0)
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Grayscaled stream')
@@ -23,16 +23,18 @@ class Core:
         min_area = 24 * 32
         md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=5)
 
+        gen_color = lambda id: (id * 219 % 255, id * 179 % 255, id * 301 % 255)
+
         while True:
             success, frame = video.next_frame()
 
             if success:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 contours, processed_frame = md.detect_motion(gray, return_processed_frame=True)
-                for contour in contours:
+                for ind, contour in contours:
                     x1,y1,x2,y2 = contour
-                    cv2.rectangle(img=frame, pt1=(x1, y1), pt2=(x2, y2), color=(0, 255, 0), thickness=2)
-
+                    cv2.rectangle(img=frame, pt1=(x1, y1), pt2=(x2, y2), color=gen_color(ind), thickness=2)
+                    
                 grayscaled_window.show_frame(processed_frame)
                 original_window.show_frame(frame)
             else: 

@@ -54,7 +54,7 @@ class CVMotionDetector(IMotionDetector):
         self.max_elapsed_time = max_elapsed_time
     
     def detect_motion(self, frame: np.ndarray, return_processed_frame: bool = False):
-        frame = cv2.GaussianBlur(frame, ksize=(7,7), sigmaX=0)
+        frame = cv2.GaussianBlur(frame, ksize=(17,17), sigmaX=0)
 
         # store first `capacity` frames and accumulate their sum
         if len(self.frame_pool) != self.capacity:
@@ -97,7 +97,6 @@ class CVMotionDetector(IMotionDetector):
         result = [result[i] for i in range(len(result)) if mask[i]]
 
         # take only rectangles for which there was center on previous frames
-        get_center = lambda r: ((r[0] + r[2])/2, (r[1] + r[3])/2)
         used_rectangles = [False] * len(result)
 
         if not self.figures:
@@ -115,16 +114,16 @@ class CVMotionDetector(IMotionDetector):
                 for id in self.figures:
                     self.figure_center_streak[id] = self.figure_center_streak.get(id, [0, 0, False])
                     self.figure_center_streak[id][2] = False
-                    if Geometry.inside(get_center(self.figures[id]), inflated_rectangle):
+                    if Geometry.inside(Geometry.get_center(self.figures[id]), inflated_rectangle):
                         self.figures[id] = result[i].copy()
                         used_rectangles[i] = True
                         self.figure_center_streak[id][0] += 1
-                        self.figure_center_streak[id][1] = max(0, self.figure_center_streak[id][1]-1)
-                        self.figure_center_streak[id][2] = False
+                        self.figure_center_streak[id][1] = 0
+                        self.figure_center_streak[id][2] = True
             # delete figures that wasn't found on frame
             to_del = []
             for id in self.figure_center_streak:
-                if self.figure_center_streak[id][2]:
+                if not self.figure_center_streak[id][2]:
                     # figure wasn't found
                     self.figure_center_streak[id][1] += 1
                     if self.figure_center_streak[id][1] >= self.max_elapsed_time:
@@ -140,11 +139,11 @@ class CVMotionDetector(IMotionDetector):
                 self.figure_center_streak[self.figure_cnt] = [0, 0, True]
                 self.figure_cnt += 1
         
-        print(self.figure_center_streak)
+        #print(self.figure_center_streak)
 
-        result = np.array(
-            [self.figures[i] for i in self.figures if self.figure_center_streak[i][0] >= self.patience])
-        print(result)
+        result = \
+            [[i, self.figures[i]] for i in self.figures if self.figure_center_streak[i][0] >= self.patience]
+        #print(result)
         if return_processed_frame:
             return result, thresh_frame
         return result
