@@ -116,7 +116,6 @@ class CVMotionDetector(IMotionDetector):
                     self.figure_center_streak[id][2] = False
                     if Geometry.inside(Geometry.get_center(self.figures[id]), inflated_rectangle):
                         self.figures[id] = result[i].copy()
-                        #print('found same ', result[i], 'as', id, f'{i=}')
                         used_rectangles[i] = True
                         self.figure_center_streak[id][0] += 1
                         self.figure_center_streak[id][1] = 0
@@ -129,22 +128,17 @@ class CVMotionDetector(IMotionDetector):
                     # figure wasn't found
                     self.figure_center_streak[id][1] += 1
                     if self.figure_center_streak[id][1] >= self.max_elapsed_time:
-                        #print(f'{id} will be deleted {self.figures[id]}, {self.figure_center_streak[id]}')
                         to_del.append(id)
             for id in to_del:
                 del self.figures[id]
                 del self.figure_center_streak[id]
         
         # iterate through non-used rectangles and add them to self.figures
-        #print('-> ', self.figures)
         for i in range(len(result)):
             if not used_rectangles[i]:
-                #print(f'add {i}', result[i])
                 self.figures[self.figure_cnt] = result[i].copy()
                 self.figure_center_streak[self.figure_cnt] = [0, 0, True]
                 self.figure_cnt += 1
-        
-        #print(self.figure_center_streak)
 
         result = \
             [[i, self.figures[i]] for i in self.figures if self.figure_center_streak[i][0] >= self.patience]
