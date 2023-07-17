@@ -31,13 +31,16 @@ class CVMotionDetector(IMotionDetector):
         threshold : int
             minimal brightness of object in frame difference to consider
         max_deviation : int
-            maximal deviation of the center of an object relatively to its rectangle borders (in L1 norm) compared to previous frame. 
-            initialize as `-1` to disable this feature.
+            maximal deviation of the center of an object relatively to its rectangle borders (in L1 norm) compared to previous frame.
         patience : int
             quantity of frames to wait to admit figure presence on frame
         max_elapsed_time : int
-            quantity of frames to wait for previously moving object to admit its stopped 
+            quantity of frames to wait for previously moving object to admit its stopped
         '''
+        assert max_deviation >= 0
+        assert max_elapsed_time >= 0
+        assert capacity >= 1
+
         self.frame_pool = deque([]) 
         self.pool_sum = np.zeros((height, width))
 
@@ -104,7 +107,7 @@ class CVMotionDetector(IMotionDetector):
                 self.figures[self.figure_cnt] = rect.copy()
                 self.figure_center_streak[self.figure_cnt] = [0, 0, True]
                 self.figure_cnt += 1
-        elif self.max_deviation >= 0:
+        else:
             for i in range(len(result)):
                 inflated_rectangle = [
                     result[i][0]-self.max_deviation, result[i][1]-self.max_deviation,

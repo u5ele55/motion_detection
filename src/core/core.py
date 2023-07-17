@@ -25,7 +25,7 @@ class Core:
         print("Video resolution: ", height, width)
 
         min_area = 24 * 32
-        md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=5, max_elapsed_time=3)
+        md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=5, max_elapsed_time=5)
 
         gen_color = lambda id: (id * 219 % 255, id * 179 % 255, id * 301 % 255)
         trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=120)
