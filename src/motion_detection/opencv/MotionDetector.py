@@ -42,7 +42,7 @@ class CVMotionDetector(IMotionDetector):
         assert capacity >= 1
 
         self.frame_pool = deque([]) 
-        self.pool_sum = np.zeros((height, width))
+        self.pool_sum = np.zeros((height, width), dtype='int32')
 
         self.figures = {}    # {rect_id: [vertices]}
         self.figure_center_streak = {} # {rect_id: [center_streak, elapsed_time, found_on_frame]}
@@ -64,7 +64,7 @@ class CVMotionDetector(IMotionDetector):
             self.frame_pool.append(frame.copy())
             self.pool_sum += frame
             if return_processed_frame:
-                return np.array([]), self.pool_sum / len(self.frame_pool)
+                return np.array([]), (self.pool_sum / len(self.frame_pool)).astype('uint8')
             return np.array([])
         
         diff = cv2.absdiff(frame, (self.pool_sum / self.capacity).astype('uint8'))
