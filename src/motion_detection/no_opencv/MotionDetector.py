@@ -38,7 +38,7 @@ class CustomMotionDetector(IMotionDetector):
         # look for white figures
         contours = self.__grid_contour_search(processed)
 
-        return contours, cv2.threshold(processed.astype('uint8'), 3, 255, cv2.THRESH_BINARY)[1]
+        return contours, cv2.threshold(processed.astype('uint8'), 5, 255, cv2.THRESH_BINARY)[1]
     
     def __grid_contour_search(self, frame):
         threshold = 30
@@ -67,7 +67,7 @@ class CustomMotionDetector(IMotionDetector):
         rect = [start_x,start_y,start_x,start_y]
         step_y = 2
         step_x = 2
-        threshold = 3
+        threshold = 5
 
         H,W = frame.shape[:2]
 
