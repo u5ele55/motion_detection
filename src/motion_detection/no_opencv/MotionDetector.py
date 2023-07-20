@@ -7,14 +7,11 @@ import cv2
 class CustomMotionDetector(IMotionDetector):
     def __init__(self, *, 
                  capacity: int=10, 
-                 min_height: int=12, 
-                 min_width: int=12, 
-                 avg_pooling_size: tuple[int]=(3, 3)):
+                 ):
 
         self.frame_pool = deque([])
         self.pool_sum = None
 
-        self.step = (np.ceil(min_height / avg_pooling_size[0]), np.ceil(min_width / avg_pooling_size[1]))
         self.capacity = capacity
 
     def detect_motion(self, frame: np.ndarray, return_processed_frame: bool = False):
@@ -52,12 +49,14 @@ class CustomMotionDetector(IMotionDetector):
         for row in range(step_y, H, step_y):
             for col in range(step_x, W, step_x):
                 if frame[row, col] >= threshold:
-                    # ignore pixels inside already created rectangles
+                    # ignore pixels inside of already created rectangles
                     if self.__insideContour(contours, row, col):
                         continue
 
                     rect = self.__inflateRectangle(frame, row, col)
+                    # TODO: change it to something more reasonable
                     if (rect[2] - rect[0]) * (rect[3] - rect[1]) > 20:
+                        # TODO: add ids to later draw trajectory
                         contours.append((np.random.randint(0, 1000000), rect))
         
         return contours
@@ -71,6 +70,7 @@ class CustomMotionDetector(IMotionDetector):
 
         H,W = frame.shape[:2]
 
+        # solution to 0 <= start_x + kx*step_x <= W-1
         minkx, minky = -(start_x+step_x-1)//step_x, -(start_y+step_y-1)//step_y
         maxkx, maxky = (W-start_x-1)//step_x, (H-start_y-1)//step_y
         
