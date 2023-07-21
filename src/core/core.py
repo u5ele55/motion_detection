@@ -12,8 +12,8 @@ import time
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
-        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
+        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
+        #video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
         #video = CameraCapturer(0)
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Grayscaled stream')

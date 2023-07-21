@@ -56,10 +56,56 @@ class CustomMotionDetector(IMotionDetector):
         
         # look for white figures
         contours = self.__grid_contour_search(processed)
+
+        # attach ids to contours
+        used_rectangles = [False] * len(contours)
+
+        if not self.figures:
+            for rect in contours:
+                self.figures[self.figure_cnt] = rect.copy()
+                self.figure_center_streak[self.figure_cnt] = [0, 0, True]
+                self.figure_cnt += 1
+        else:
+            for i in range(len(contours)):
+                inflated_rectangle = [
+                    contours[i][0]-self.max_deviation, contours[i][1]-self.max_deviation,
+                    contours[i][2]+self.max_deviation, contours[i][3]+self.max_deviation,
+                    ]
+                # find id s.t. self.figures[id] has center in contours[i] borders (consider deviation) 
+                for id in self.figures:
+                    self.figure_center_streak[id] = self.figure_center_streak.get(id, [0, 0, False])
+                    self.figure_center_streak[id][2] = False
+                    if Geometry.inside(Geometry.get_center(self.figures[id]), inflated_rectangle):
+                        self.figures[id] = contours[i].copy()
+                        used_rectangles[i] = True
+                        self.figure_center_streak[id][0] += 1
+                        self.figure_center_streak[id][1] = 0
+                        self.figure_center_streak[id][2] = True
+                        break
+            # delete figures that wasn't found on frame
+            to_del = []
+            for id in self.figure_center_streak:
+                if not self.figure_center_streak[id][2]:
+                    # figure wasn't found
+                    self.figure_center_streak[id][1] += 1
+                    if self.figure_center_streak[id][1] >= self.max_elapsed_time:
+                        to_del.append(id)
+            for id in to_del:
+                del self.figures[id]
+                del self.figure_center_streak[id]
         
+        # iterate through non-used rectangles and add them to self.figures
+        for i in range(len(contours)):
+            if not used_rectangles[i]:
+                self.figures[self.figure_cnt] = contours[i].copy()
+                self.figure_center_streak[self.figure_cnt] = [0, 0, True]
+                self.figure_cnt += 1
+
+        result = \
+            [[i, self.figures[i]] for i in self.figures if self.figure_center_streak[i][0] >= self.patience]
         if return_processed_frame:
-            return contours, processed.astype('uint8')
-        return contours
+            return result, processed.astype('uint8')
+        return result
     
     def __grid_contour_search(self, frame):
         step_y = self.detection_step[1]
@@ -79,9 +125,8 @@ class CustomMotionDetector(IMotionDetector):
                     rect = self.__inflateRectangle(frame, row, col)
                     # TODO: change it to something more reasonable
                     if (rect[2] - rect[0]) * (rect[3] - rect[1]) > 20:
-                        # TODO: add ids to later draw trajectory
-                        contours.append((np.random.randint(0, 1000000), rect))
-        
+                        contours.append(rect)
+
         return contours
     
     def __inflateRectangle(self, frame, start_y, start_x):
@@ -111,11 +156,13 @@ class CustomMotionDetector(IMotionDetector):
 
         in_bounds = lambda y, x: 0 <= y < grid_height and 0 <= x < grid_width
 
+        offset_y, offset_x = start_y % step_y, start_x % step_x
+
         while queue:
             y, x = queue.pop(0)
             in_figure = False
 
-            absolute_y, absolute_x = start_y % step_y + y * step_y, start_x % step_x + x * step_x
+            absolute_y, absolute_x = offset_y + y * step_y, offset_x + x * step_x
 
             if frame[absolute_y, absolute_x] > self.object_threshold:
                 in_figure = True
@@ -142,7 +189,7 @@ class CustomMotionDetector(IMotionDetector):
         return rect
 
     def __insideContour(self, contours, y, x):
-        for _, rect in contours:
+        for rect in contours:
             if Geometry.inside((x,y), rect): 
                 return True
         
