@@ -18,10 +18,19 @@
 
 ### Промежуточные результаты
 #### OpenCV
-![изображение](https://github.com/u5ele55/motion_detection/assets/99137907/585c4152-1e67-466f-9a68-af9e90c63988)
+![изображение](https://github.com/u5ele55/motion_detection/assets/99137907/585c4152-1e67-466f-9a68-af9e90c63988) <br>
+
+Видео: <br>
+
+https://github.com/u5ele55/motion_detection/assets/99137907/92643365-71e7-4250-8406-a1dba4d609a4
+
 
 #### Без OpenCV
-![image](https://github.com/u5ele55/motion_detection/assets/99137907/c32b6c61-bf4c-410f-afee-0e6585ae92db)
+![изображение](https://github.com/u5ele55/motion_detection/assets/99137907/06b87502-d577-4ff8-911f-b4683771e9ef) <br>
+
+Видео: <br>
+
+https://github.com/u5ele55/motion_detection/assets/99137907/23acc10f-6ab2-43eb-b247-ece67a076b58
 
 
 ### Основные идеи
