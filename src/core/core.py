@@ -5,6 +5,7 @@ from visual.FrameDemonstration import FrameDemonstration
 from visual.TrajectoryDrawer import TrajectoryDrawer
 from motion_detection.opencv.MotionDetector import *
 
+from motion_detection.no_opencv.MotionDetector import CustomMotionDetector
 
 import time
 
@@ -12,6 +13,7 @@ class Core:
     '''Class where all the components come together'''
     def start(self):
         video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
+        #video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
         #video = CameraCapturer(0)
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Grayscaled stream')
@@ -25,10 +27,12 @@ class Core:
         print("Video resolution: ", height, width)
 
         min_area = 24 * 32
-        md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=5, max_elapsed_time=5)
+        md = CVMotionDetector(height, width, min_area=min_area, threshold=15, capacity=10, max_elapsed_time=5, patience=5)
+
+        #md = CustomMotionDetector(object_threshold=5, move_threshold=15, patience=5)
 
         gen_color = lambda id: (id * 219 % 255, id * 179 % 255, id * 301 % 255)
-        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=120)
+        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=20)
 
         while True:
             success, frame = video.next_frame()
@@ -45,7 +49,7 @@ class Core:
                 original_window.show_frame(frame)
             else: 
                 break
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
             
 
