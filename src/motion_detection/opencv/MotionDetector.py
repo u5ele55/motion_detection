@@ -23,7 +23,7 @@ class CVMotionDetector(IMotionDetector):
         width : int
             width of a frame
         capacity : int
-            quantity of previous frames which are to used detect motion on a new frame
+            quantity of previous frames which are used to detect motion on a new frame
         min_area : int
             minimal area of an object to consider
         dilation : int

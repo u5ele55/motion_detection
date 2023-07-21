@@ -27,12 +27,12 @@ class Core:
         print("Video resolution: ", height, width)
 
         min_area = 24 * 32
-        #md = CVMotionDetector(height, width, min_area=min_area, threshold=5, capacity=10, max_elapsed_time=10, patience=10)
+        md = CVMotionDetector(height, width, min_area=min_area, threshold=15, capacity=10, max_elapsed_time=5, patience=5)
 
-        md = CustomMotionDetector()
+        #md = CustomMotionDetector(object_threshold=5, move_threshold=15, patience=5)
 
         gen_color = lambda id: (id * 219 % 255, id * 179 % 255, id * 301 % 255)
-        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=120)
+        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=20)
 
         while True:
             success, frame = video.next_frame()
@@ -49,7 +49,7 @@ class Core:
                 original_window.show_frame(frame)
             else: 
                 break
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
             
 

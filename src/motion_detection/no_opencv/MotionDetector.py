@@ -18,7 +18,29 @@ class CustomMotionDetector(IMotionDetector):
                  detection_step: tuple[int]=(10,10),
                  object_selection_step: tuple[int]=(3,3)
                  ):
-
+        '''
+        
+        Parameters
+        ----------
+        capacity : int
+            quantity of previous frames which are used to detect motion on a new frame
+        max_deviation : int
+            maximal deviation of the center of an object relatively to its rectangle borders (in L1 norm) compared to previous frame.
+        patience : int
+            quantity of frames to wait to admit figure presence on frame
+        max_elapsed_time : int
+            quantity of frames to wait for previously moving object to admit its stopped
+        
+        move_threshold : int
+            minimal brightness of difference of object and previous frames to consider
+        object_threshold : int
+            minimal value of the same difference when discovering object volume
+        
+        detection_step : tuple[int]
+            step on x and y axis to perform when looking for objects
+        object_selection_step : tuple[int]
+            step on x and y axis to perform when discovering object volume
+        '''
         self.capacity = capacity
         self.frame_pool = deque([])
         self.pool_sum = None
@@ -138,13 +160,14 @@ class CustomMotionDetector(IMotionDetector):
         H,W = frame.shape[:2]
 
         # solution to 0 <= start_x + kx*step_x <= W-1
-        minkx, minky = -(start_x+step_x-1)//step_x, -(start_y+step_y-1)//step_y
+        minkx, minky = (-start_x+step_x-1)//step_x, (-start_y+step_y-1)//step_y
         maxkx, maxky = (W-start_x-1)//step_x, (H-start_y-1)//step_y
         
         visited = np.zeros(
             (maxky - minky + 1, maxkx - minkx + 1), 
             dtype=bool)
         grid_height, grid_width = visited.shape
+
         queue = []
 
         visited[start_y // step_y, start_x // step_x] = True
