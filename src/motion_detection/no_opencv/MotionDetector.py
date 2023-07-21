@@ -34,8 +34,10 @@ class CustomMotionDetector(IMotionDetector):
         
         # look for white figures
         contours = self.__grid_contour_search(processed)
-
-        return contours, cv2.threshold(processed.astype('uint8'), 5, 255, cv2.THRESH_BINARY)[1]
+        
+        if return_processed_frame:
+            return contours, processed.astype('uint8')
+        return contours
     
     def __grid_contour_search(self, frame):
         threshold = 30
@@ -64,8 +66,8 @@ class CustomMotionDetector(IMotionDetector):
     def __inflateRectangle(self, frame, start_y, start_x):
         '''Starting at (x,y), tries to find inner points of figure with BFS, and then fits it into rectangle'''
         rect = [start_x,start_y,start_x,start_y]
-        step_y = 2
-        step_x = 2
+        step_y = 3
+        step_x = 3
         threshold = 5
 
         H,W = frame.shape[:2]
