@@ -12,11 +12,11 @@ import time
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
-        #video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
-        #video = CameraCapturer(0)
+        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\topview.mp4')
+        #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\clouds_2.mp4')
+
         original_window = FrameDemonstration('Original stream')
-        grayscaled_window = FrameDemonstration('Grayscaled stream')
+        grayscaled_window = FrameDemonstration('Changes')
 
         ret, frame = video.next_frame()
         
@@ -26,13 +26,16 @@ class Core:
         height, width = frame.shape[:2]
         print("Video resolution: ", height, width)
 
-        min_area = 24 * 32
-        md = CVMotionDetector(height, width, min_area=min_area, threshold=15, capacity=10, max_elapsed_time=5, patience=5)
+        min_area = 12 * 16
 
-        #md = CustomMotionDetector(object_threshold=5, move_threshold=15, patience=5)
-
+        md = CVMotionDetector(height, width, min_area=min_area, threshold=10, 
+                              capacity=15, max_elapsed_time=5, patience=5)
+        '''md = CustomMotionDetector(capacity=3, object_threshold=3, move_threshold=10, 
+                                  patience=10, max_elapsed_time=10, min_area=min_area,
+                                  detection_step=(16,16), object_selection_step=(5,5))
+        '''
         gen_color = lambda id: (id * 219 % 255, id * 179 % 255, id * 301 % 255)
-        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=20)
+        trajectory = TrajectoryDrawer(color_generator=gen_color, memory_size=40)
 
         while True:
             success, frame = video.next_frame()
@@ -41,7 +44,7 @@ class Core:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 contours, processed_frame = md.detect_motion(gray, return_processed_frame=True)
                 for ind, contour in contours:
-                    x1,y1,x2,y2 = contour
+                    x1,y1,x2,y2 = contour[:4]
                     cv2.rectangle(img=frame, pt1=(x1, y1), pt2=(x2, y2), color=gen_color(ind), thickness=2)
                     
                 frame = trajectory.draw(frame, contours)

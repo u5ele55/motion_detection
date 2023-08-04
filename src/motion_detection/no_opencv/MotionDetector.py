@@ -9,6 +9,7 @@ class CustomMotionDetector(IMotionDetector):
                  capacity: int=10, 
                  
                  max_deviation: int = 0, 
+                 min_area: int = 20,
                  patience: int = 2,
                  max_elapsed_time: int = 5,
 
@@ -48,6 +49,8 @@ class CustomMotionDetector(IMotionDetector):
         self.figures = {}    # {rect_id: [vertices]}
         self.figure_center_streak = {} # {rect_id: [center_streak, elapsed_time, found_on_frame]}
         self.figure_cnt = 0
+
+        self.min_area = min_area
 
         self.max_deviation = max_deviation
         self.patience = patience
@@ -146,7 +149,7 @@ class CustomMotionDetector(IMotionDetector):
 
                     rect = self.__inflateRectangle(frame, row, col)
                     # TODO: change it to something more reasonable
-                    if (rect[2] - rect[0]) * (rect[3] - rect[1]) > 20:
+                    if (rect[2] - rect[0]) * (rect[3] - rect[1]) > self.min_area:
                         contours.append(rect)
 
         return contours
@@ -187,6 +190,7 @@ class CustomMotionDetector(IMotionDetector):
 
             absolute_y, absolute_x = offset_y + y * step_y, offset_x + x * step_x
 
+            # part of object
             if frame[absolute_y, absolute_x] > self.object_threshold:
                 in_figure = True
                 # update rect
