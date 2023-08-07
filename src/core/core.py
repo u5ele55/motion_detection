@@ -10,7 +10,7 @@ import time
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\topview.mp4')
+        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
         #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\clouds_2.mp4')
 
         original_window = FrameDemonstration('Original stream')
@@ -24,7 +24,7 @@ class Core:
         height, width = frame.shape[:2]
         print("Video resolution: ", height, width)
 
-        md = FlowMotionDetector()
+        md = FlowMotionDetector(frame)
 
         while True:
             success, frame = video.next_frame()
