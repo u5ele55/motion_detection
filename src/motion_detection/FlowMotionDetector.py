@@ -60,31 +60,33 @@ class FlowMotionDetector(IMotionDetector):
     def __extract_figures(self, flow: np.ndarray):
         H, W = flow.shape[:2]
         
-        # perform grid checking looking for pixels that arent close to estimated pixel 
+        # perform grid checking looking for pixels that aren't close to estimated pixel 
         # (which could be calculated as mean of previous pixels or mean of some area around current pixel)
         step_x, step_y = self.grid_shape
 
-        window_radius = 2
+        window_radius = 1
 
-        difference_map = np.zeros((2 * H // step_y, 2 * W // step_x))
+        difference_map = np.zeros((1 * (H + step_y - 1) // step_y, 1 * (W + step_x - 1) // step_x))
 
         for y in range(window_radius * step_y, H-window_radius, step_y):
             for x in range(window_radius * step_x, W-window_radius, step_x):
                 # calculate mean and compare to current pixel
-                # calc mean at window_radius x window_radius
                 mean = flow[
                     y-window_radius*step_y : y+window_radius*step_y+1 : step_y, 
                     x-window_radius*step_x : x+window_radius*step_x+1 : step_x].mean(axis=(0,1))
                 
-                difference_map[2 * y // step_y, 2 * x // step_x] = self.__color_diff(mean, flow[y,x])
+                difference_map[1 * y // step_y, 1 * x // step_x] = self.__color_diff(mean, flow[y,x])
         
         difference_map /= 768 # normalization (max value of difference is ~ 767.83)
-        
+
         cv2.imshow('diff map', difference_map)
         # now we need to detect contours in difference_map - white regions
+        # firstly lets find some big values and then run bfs with smaller threshold from that pixel to expand contour
+        for y in range(H // step_y):
+            for x in range(W // step_x):
+                
+                pass
         
-        
-
         return None
         
     def __color_diff(self, c1, c2):
