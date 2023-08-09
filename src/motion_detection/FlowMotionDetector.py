@@ -9,7 +9,7 @@ MAX_FRAME_RESOLUTION_FLOW = 130_000
 
 class FlowMotionDetector(IMotionDetector):
     def __init__(self, sample_frame: np.ndarray, *, 
-                 grid_shape: tuple[int]=(5,5),
+                 grid_shape: tuple[int]=(7,7),
                  ):
         '''
         
@@ -42,8 +42,8 @@ class FlowMotionDetector(IMotionDetector):
         if self.new_size is not None: 
             frame = cv2.resize(frame, self.new_size)
         
-        next = cv2.calcOpticalFlowFarneback(self.previous, frame, None, 0.5, 3, 15, 3, 5, 1.1, 0)
-        mag, ang = cv2.cartToPolar(next[:, :, 0], next[:, :, 1])
+        calc = cv2.calcOpticalFlowFarneback(self.previous, frame, None, 0.5, 3, 15, 3, 5, 1.1, 0)
+        mag, ang = cv2.cartToPolar(calc[:, :, 0], calc[:, :, 1])
         self.hsv[:, :, 0] = ang * 180 / np.pi / 2
         self.hsv[:, :, 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
         flow = cv2.cvtColor(self.hsv, cv2.COLOR_HSV2BGR)
@@ -60,14 +60,33 @@ class FlowMotionDetector(IMotionDetector):
     def __extract_figures(self, flow: np.ndarray):
         H, W = flow.shape[:2]
         
-        # perform grid checking looking for pixels that arent close to estimated pixel (which could be calculated as mean of previous pixels or mean of some area around current pixel)
+        # perform grid checking looking for pixels that arent close to estimated pixel 
+        # (which could be calculated as mean of previous pixels or mean of some area around current pixel)
         step_x, step_y = self.grid_shape
 
-        for y in range(0, H, step_y):
-            for x in range(0, W, step_x):
-                # calculate mean and compare to current pixel
-                pass
+        window_radius = 2
 
+        difference_map = np.zeros((2 * H // step_y, 2 * W // step_x))
+
+        for y in range(window_radius * step_y, H-window_radius, step_y):
+            for x in range(window_radius * step_x, W-window_radius, step_x):
+                # calculate mean and compare to current pixel
+                # calc mean at window_radius x window_radius
+                mean = flow[
+                    y-window_radius*step_y : y+window_radius*step_y+1 : step_y, 
+                    x-window_radius*step_x : x+window_radius*step_x+1 : step_x].mean(axis=(0,1))
+                
+                difference_map[2 * y // step_y, 2 * x // step_x] = self.__color_diff(mean, flow[y,x])
+        
+        difference_map /= 768 # normalization (max value of difference is ~ 767.83)
+        
+        cv2.imshow('diff map', difference_map)
+        # now we need to detect contours in difference_map - white regions
+        
+        
+
+        return None
+        
     def __color_diff(self, c1, c2):
         ''' colors in bgr '''
         c1 = c1.astype('int32')

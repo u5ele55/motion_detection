@@ -5,13 +5,11 @@ from visual.FrameDemonstration import FrameDemonstration
 from visual.TrajectoryDrawer import TrajectoryDrawer
 from motion_detection.FlowMotionDetector import FlowMotionDetector
 
-import time
-
 class Core:
     '''Class where all the components come together'''
     def start(self):
         video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
-        #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\clouds_2.mp4')
+        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\drone_traffic.mp4')
 
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Changes')
