@@ -31,6 +31,7 @@ class Core:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 contours, processed_frame = md.detect_motion(gray, return_processed_frame=True)
                 # draw contours
+                
 
                 grayscaled_window.show_frame(processed_frame)
                 original_window.show_frame(frame)
