@@ -22,13 +22,14 @@ class FlowMotionDetector(IMotionDetector):
         
         '''
         self.new_size = None
+        self.old_size = list(reversed(sample_frame.shape[:2]))
 
         H, W = sample_frame.shape[:2]
 
         if H * W > MAX_FRAME_RESOLUTION_FLOW:
-            # H * W < MAX_FRAME_RESOLUTION_FLOW
+            # h * w < MAX_FRAME_RESOLUTION_FLOW
             # H * W * a^2 < MAX_FRAME_RESOLUTION_FLOW
-            # a^2 = MAX_FRAME_RESOLUTION_FLOW / H*W
+            # a^2 < MAX_FRAME_RESOLUTION_FLOW / H*W
             a = np.sqrt(MAX_FRAME_RESOLUTION_FLOW / (H * W))
             new_w, new_h = int(W * a), int(H * a)
             self.new_size = (new_w, new_h)
@@ -54,7 +55,7 @@ class FlowMotionDetector(IMotionDetector):
         flow = cv2.cvtColor(self.hsv, cv2.COLOR_HSV2BGR)
 
         self.previous = frame
-        
+        flow = cv2.bilateralFilter(flow, 20, 0.01, 1)
         # post-proceessing here (extract figures from flow)
         figures = self.__extract_figures(flow)
 
@@ -71,7 +72,9 @@ class FlowMotionDetector(IMotionDetector):
 
         window_radius = 1
 
-        difference_map = np.zeros((1 * (H + step_y - 1) // step_y, 1 * (W + step_x - 1) // step_x))
+        difference_map = np.zeros(((H + step_y - 1) // step_y, (W + step_x - 1) // step_x))
+        flow_median = np.median(cv2.cvtColor(flow, cv2.COLOR_BGR2GRAY))
+        print(flow_median)        
 
         for y in range(window_radius * step_y, H-window_radius, step_y):
             for x in range(window_radius * step_x, W-window_radius, step_x):
@@ -80,23 +83,37 @@ class FlowMotionDetector(IMotionDetector):
                     y-window_radius*step_y : y+window_radius*step_y+1 : step_y, 
                     x-window_radius*step_x : x+window_radius*step_x+1 : step_x].mean(axis=(0,1))
                 
-                difference_map[1 * y // step_y, 1 * x // step_x] = self.__color_diff(mean, flow[y,x])
+                if np.array([.114, .587, .299]).dot(flow[y, x]) < flow_median:
+                    flow[y, x] = mean
+                    print(f'changed {y} {x}')
+
+                difference_map[y // step_y, x // step_x] = self.__color_diff(mean, flow[y,x])
         
         difference_map /= 768 # normalization (max value of difference is ~ 767.83)
+        self.detection_threshold = difference_map.max() * 2/6 + difference_map.min() * 4/6
 
-        cv2.imshow('diff map', difference_map)
+        cv2.imshow('diff map', cv2.resize(difference_map, (difference_map.shape[1] * step_x, difference_map.shape[0] * step_y), interpolation=cv2.INTER_NEAREST))
         # now we need to detect contours in difference_map - white regions
         # firstly lets find some big values and then run bfs with smaller threshold from that pixel to expand contour
         rectangles = []
         for y in range(H // step_y):
             for x in range(W // step_x):
+                # ignore black spots
                 if difference_map[y, x] > self.detection_threshold:
                     rect = self.__inflateRectangle(difference_map, y, x)
                     rectangles.append(rect)
-        rectangles = np.array(rectangles)
-        print( rectangles * step_y )
+        if not rectangles:
+            return np.array([], dtype='int32')
+        rectangles = np.array(rectangles, dtype=float)
 
-        return rectangles * step_y # mlt by comps
+        rectangles[:, 0 :: 2] *= step_x # scale to flow size
+        rectangles[:, 1 :: 2] *= step_y
+
+        if self.new_size is not None:
+            rectangles[:, 0 :: 2] *= self.old_size[0] / self.new_size[0] # scale to frame size
+            rectangles[:, 1 :: 2] *= self.old_size[1] / self.new_size[1]
+
+        return rectangles.astype('int32')
         
     def __color_diff(self, c1, c2):
         ''' colors in bgr '''
@@ -113,51 +130,38 @@ class FlowMotionDetector(IMotionDetector):
     def __inflateRectangle(self, frame, start_y, start_x):
         '''Starting at (x,y), tries to find inner points of figure with BFS, and then fits it into rectangle'''
         rect = [start_x,start_y,start_x,start_y]
-        step_y = 1
-        step_x = 1
 
-        H,W = frame.shape[:2]
-
-        # solution to 0 <= start_x + kx*step_x <= W-1
-        minkx, minky = (-start_x+step_x-1)//step_x, (-start_y+step_y-1)//step_y
-        maxkx, maxky = (W-start_x-1)//step_x, (H-start_y-1)//step_y
-        
-        visited = np.zeros(
-            (maxky - minky + 1, maxkx - minkx + 1), 
-            dtype=bool)
+        visited = np.zeros_like(frame, dtype=bool)
         grid_height, grid_width = visited.shape
 
         queue = []
 
-        visited[start_y // step_y, start_x // step_x] = True
-        queue.append( (start_y // step_y, start_x // step_x) )
+        visited[start_y, start_x] = True
+        queue.append( (start_y, start_x) )
 
         steps = np.array(
-            [[-1, 0], [1, 0], [0, 1], [0, -1]]
+            [[-1,  0], [1,  0], [0,  1], [0,  -1],
+             [-1, -1], [1,  1], [1, -1], [-1,  1]]
         )
 
         in_bounds = lambda y, x: 0 <= y < grid_height and 0 <= x < grid_width
-
-        offset_y, offset_x = start_y % step_y, start_x % step_x
-
+        self.object_threshold = frame.max() * 1/10 + frame.min() * 9/10
         while queue:
             y, x = queue.pop(0)
             in_figure = False
 
-            absolute_y, absolute_x = offset_y + y * step_y, offset_x + x * step_x
-
             # part of object
-            if frame[absolute_y, absolute_x] > self.object_threshold:
+            if frame[y, x] > self.object_threshold:
                 in_figure = True
                 # update rect
-                if absolute_x < rect[0]:
-                    rect[0] = absolute_x
-                if absolute_y < rect[1]:
-                    rect[1] = absolute_y
-                if absolute_x > rect[2]:
-                    rect[2] = absolute_x
-                if absolute_y > rect[3]:
-                    rect[3] = absolute_y
+                if x < rect[0]:
+                    rect[0] = x
+                if y < rect[1]:
+                    rect[1] = y
+                if x > rect[2]:
+                    rect[2] = x
+                if y > rect[3]:
+                    rect[3] = y
             
             if not in_figure: 
                 continue
