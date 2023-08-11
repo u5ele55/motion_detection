@@ -1,5 +1,6 @@
 import numpy as np
 from motion_detection.IMotionDetector import IMotionDetector
+from utilities.geometry import Geometry
 import cv2
 from sklearn.cluster import KMeans
 from sklearn.utils import shuffle
@@ -13,14 +14,16 @@ class FlowMotionDetector(IMotionDetector):
     def __init__(self, sample_frame: np.ndarray, *, 
                  grid_shape: tuple[int]=(7,7),
                  training_sample_size: int=1000,
-                 n_clusters: int=3
+                 n_clusters: int=3,
+                 detection_threshold: float=5/6,
+                 selection_threshold: float=2/10
                  ):
         '''
         
         Parameters
         ----------
         grid_shape: tuple[int]
-            step on x and y-axis when iterating through flow frame in search of figure
+            step on y and x-axis when iterating through flow frame in search of figure
         '''
         self.new_size = None
         self.old_size = list(reversed(sample_frame.shape[:2]))
@@ -41,12 +44,14 @@ class FlowMotionDetector(IMotionDetector):
         self.hsv[:, :, 1] = 255
 
         self.grid_shape = grid_shape
+        assert 0 <= detection_threshold <= 1 and 0 <= selection_threshold <= 1 
+        self.detection_threshold = detection_threshold
+        self.selection_threshold = selection_threshold
         size = self.new_size if self.new_size is not None else self.old_size
         self.clustering_step = size[0] * size[1] // training_sample_size
 
         self.kmeans = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0)
         self.frames_processed = 0
-
     
     def detect_motion(self, frame: np.ndarray, return_processed_frame=False):
         if self.new_size is not None: 
@@ -64,13 +69,13 @@ class FlowMotionDetector(IMotionDetector):
 
         cv2.imshow('cluster', clusterized_flow)
 
-        self.a__find_outliers(clusterized_flow)
+        figures = self.__find_figures(clusterized_flow)
 
         self.frames_processed += 1
         
         if return_processed_frame:
-            return [], flow
-        return []
+            return figures, flow
+        return figures
     
     def __clusterize(self, flow: np.ndarray):
         h,w,c = flow.shape
@@ -82,43 +87,40 @@ class FlowMotionDetector(IMotionDetector):
             self.kmeans.fit(flow_array_sample)
 
         labels = self.kmeans.predict(flow_array)
-
-        cv2.imshow(
-            'colors', 
-            cv2.resize(
-                self.kmeans.cluster_centers_.reshape((1, len(self.kmeans.cluster_centers_), 3)), 
-                (40 * len(self.kmeans.cluster_centers_), 40), 
-                interpolation=cv2.INTER_NEAREST
-            )
-        )
         
         return self.kmeans.cluster_centers_[labels].reshape(h, w, -1)
-    
-    def __find_outliers(self, image: np.ndarray):
+
+    def __find_figures(self, image: np.ndarray):
+        grad = self.__find_gradient(image)
+        cv2.imshow('grad', 
+                cv2.resize(grad, (grad.shape[1] * 5, grad.shape[0] * 5), interpolation=cv2.INTER_NEAREST)
+        )
+        thresh = max(grad.max() * self.detection_threshold, 0.2)
+        self.__show_scaled('grad threshold', cv2.threshold(grad, thresh, 1, cv2.THRESH_BINARY)[1], 5)
+
+        rects = []
+        for i in range(grad.shape[0]):
+            for j in range(grad.shape[1]):
+                if grad[i,j] > thresh:
+                    if self.__insideContour(rects, i, j):
+                        continue
+                    rects.append( self.__inflateRectangle(grad, i,j) )
+        rects = np.array(rects, dtype=float)
+        rects[:, 0 :: 2] *= self.grid_shape[1] # scale to flow size
+        rects[:, 1 :: 2] *= self.grid_shape[0]
+
+        if self.new_size is not None:
+            rects[:, 0 :: 2] *= self.old_size[0] / self.new_size[0] # scale to frame size
+            rects[:, 1 :: 2] *= self.old_size[1] / self.new_size[1]
         
-        color_table = {'B': 0, 'G': 1, 'R': 2}
-        grads = {color: [] for color in 'BGR'}
-
-        #image *= 255
-
-        for color in color_table:
-            grads[color] = cv2.addWeighted(
-                cv2.convertScaleAbs(cv2.Sobel(image[:,:,color_table[color]], cv2.CV_64F, 1, 0, ksize=3)), 0.5,
-                cv2.convertScaleAbs(cv2.Sobel(image[:,:,color_table[color]], cv2.CV_64F, 0, 1, ksize=3)), 0.5,
-                0)
-        
-        for c in grads:
-            cv2.imshow(f'grad {c}', grads[c])
-        
-        grad = (grads['B'] + grads['G'] + grads['R']) // 3
-        cv2.imshow('grad', grad)
+        return rects.astype("int32")
 
 
-    def a__find_outliers(self, image: np.ndarray):
+    def __find_gradient(self, image: np.ndarray):
         ''' image is clusterized '''
 
-        gradX = np.zeros((image.shape[0] // self.grid_shape[0], image.shape[1] // self.grid_shape[1]))
         image *= 255
+        gradX = np.zeros((image.shape[0] // self.grid_shape[0], image.shape[1] // self.grid_shape[1]))
 
         for i in range(0, gradX.shape[0]):
             for j in range(0, gradX.shape[1]):
@@ -126,13 +128,12 @@ class FlowMotionDetector(IMotionDetector):
                     image[i * self.grid_shape[0], j * self.grid_shape[1]], 
                     image[i * self.grid_shape[0], (j-1) * self.grid_shape[1]] )
         
-        gradX /= 768
-        cv2.imshow('gradX', 
+        '''cv2.imshow('gradX', 
             cv2.threshold(
                 cv2.resize(gradX, (gradX.shape[1] * 5, gradX.shape[0] * 5), interpolation=cv2.INTER_NEAREST),
                 0.3, 1, cv2.THRESH_BINARY
             )[1]
-        )
+        )'''
 
         gradY = np.zeros((image.shape[0] // self.grid_shape[0], image.shape[1] // self.grid_shape[1]))
 
@@ -142,23 +143,16 @@ class FlowMotionDetector(IMotionDetector):
                     image[i * self.grid_shape[0], j * self.grid_shape[1]], 
                     image[(i-1) * self.grid_shape[0], j * self.grid_shape[1]] )
         
-        gradY /= 768
-        cv2.imshow('gradY', 
+        '''cv2.imshow('gradY', 
             cv2.threshold(
                 cv2.resize(gradY, (gradY.shape[1] * 5, gradY.shape[0] * 5), interpolation=cv2.INTER_NEAREST),
                 0.3, 1, cv2.THRESH_BINARY
             )[1]
-        )
-        print('1-max', gradY.max())
+        )'''
 
-        gradsum = (gradY+gradX) / 2
+        gradsum = (gradY+gradX) / (2*768)
 
-        cv2.imshow('grad++', 
-                cv2.resize(gradsum, (gradsum.shape[1] * 5, gradsum.shape[0] * 5), interpolation=cv2.INTER_NEAREST)
-        )
-        print('2-max', gradsum.max())
-
-        return None
+        return gradsum
         
     def __color_diff(self, c1, c2):
         ''' colors in bgr '''
@@ -185,12 +179,14 @@ class FlowMotionDetector(IMotionDetector):
         queue.append( (start_y, start_x) )
 
         steps = np.array(
-            [[-1,  0], [1,  0], [0,  1], [0,  -1],
-             [-1, -1], [1,  1], [1, -1], [-1,  1]]
+            [[-1, 0], [1,  0], [0,  1], [0, -1],
+             [-1,-1], [1,  1], [1, -1], [-1, 1]]
         )
 
         in_bounds = lambda y, x: 0 <= y < grid_height and 0 <= x < grid_width
-        object_threshold = frame.max() * 1/10 + frame.min() * 9/10
+        object_threshold = max(frame.max() * self.selection_threshold, 0.05)
+
+        self.__show_scaled('selection thresh', cv2.threshold(frame, object_threshold, 1, cv2.THRESH_BINARY)[1], 5)
         while queue:
             y, x = queue.pop(0)
             in_figure = False
@@ -219,3 +215,18 @@ class FlowMotionDetector(IMotionDetector):
                     queue.append( (ny, nx) )
 
         return rect
+    
+    def __insideContour(self, contours, y, x):
+        for rect in contours:
+            if Geometry.inside((x,y), rect): 
+                return True
+        
+        return False
+
+    def __show_scaled(self, name, frame, scale=5):
+        cv2.imshow(
+            name,
+            cv2.resize(
+                   frame, (frame.shape[1] * scale, frame.shape[0] * scale), interpolation=cv2.INTER_NEAREST
+            )
+        )
