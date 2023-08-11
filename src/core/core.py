@@ -8,8 +8,8 @@ from motion_detection.FlowMotionDetector import FlowMotionDetector
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
-        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
+        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\light_traffic.mp4')
+        #video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
 
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Changes')
@@ -22,7 +22,7 @@ class Core:
         height, width = frame.shape[:2]
         print("Video resolution: ", height, width)
 
-        md = FlowMotionDetector(frame, n_clusters=4, training_sample_size=2000)
+        md = FlowMotionDetector(frame, n_clusters=4, training_sample_size=6000)
 
         while True:
             success, frame = video.next_frame()
