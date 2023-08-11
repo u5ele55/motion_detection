@@ -1,6 +1,8 @@
 import numpy as np
 from motion_detection.IMotionDetector import IMotionDetector
 import cv2
+from sklearn.cluster import KMeans
+from sklearn.utils import shuffle
 
 import warnings
 warnings.filterwarnings("error")
@@ -10,8 +12,8 @@ MAX_FRAME_RESOLUTION_FLOW = 130_000
 class FlowMotionDetector(IMotionDetector):
     def __init__(self, sample_frame: np.ndarray, *, 
                  grid_shape: tuple[int]=(7,7),
-                 detection_threshold: float=0.1,
-                 object_threshold: float=0.05
+                 training_sample_size: int=1000,
+                 n_clusters: int=3
                  ):
         '''
         
@@ -19,7 +21,6 @@ class FlowMotionDetector(IMotionDetector):
         ----------
         grid_shape: tuple[int]
             step on x and y-axis when iterating through flow frame in search of figure
-        
         '''
         self.new_size = None
         self.old_size = list(reversed(sample_frame.shape[:2]))
@@ -40,9 +41,12 @@ class FlowMotionDetector(IMotionDetector):
         self.hsv[:, :, 1] = 255
 
         self.grid_shape = grid_shape
-        assert 0 <= detection_threshold <= 1 and 0 <= object_threshold <= 1, "Thresholds must be in a range of [0; 1]"
-        self.detection_threshold = detection_threshold
-        self.object_threshold = object_threshold
+        size = self.new_size if self.new_size is not None else self.old_size
+        self.clustering_step = size[0] * size[1] // training_sample_size
+
+        self.kmeans = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0)
+        self.frames_processed = 0
+
     
     def detect_motion(self, frame: np.ndarray, return_processed_frame=False):
         if self.new_size is not None: 
@@ -55,65 +59,30 @@ class FlowMotionDetector(IMotionDetector):
         flow = cv2.cvtColor(self.hsv, cv2.COLOR_HSV2BGR)
 
         self.previous = frame
-        flow = cv2.bilateralFilter(flow, 20, 0.01, 1)
-        # post-proceessing here (extract figures from flow)
-        figures = self.__extract_figures(flow)
+        
+        clusterized_flow = self.__clusterize(flow)
+
+        cv2.imshow('cluster', clusterized_flow)
+
+        self.frames_processed += 1
 
         if return_processed_frame:
-            return figures, flow
-        return figures
+            return [], flow
+        return []
     
-    def __extract_figures(self, flow: np.ndarray):
-        H, W = flow.shape[:2]
-        
-        # perform grid checking looking for pixels that aren't close to estimated pixel 
-        # (which could be calculated as mean of previous pixels or mean of some area around current pixel)
-        step_x, step_y = self.grid_shape
+    def __clusterize(self, flow: np.ndarray):
+        flow = flow.astype(np.float64) / 255
+        h,w,c = flow.shape
+        assert c == 3, "Flow must be rgb... Smth isn't right..."
+        flow_array = flow.reshape((w*h, c))
 
-        window_radius = 1
+        if self.frames_processed % 10 == 0:
+            flow_array_sample = flow_array[::self.clustering_step] # add regions where moving object was previously found
+            print(len(flow_array_sample))
+            self.kmeans.fit(flow_array_sample)
+        labels = self.kmeans.predict(flow_array)
 
-        difference_map = np.zeros(((H + step_y - 1) // step_y, (W + step_x - 1) // step_x))
-        flow_median = np.median(cv2.cvtColor(flow, cv2.COLOR_BGR2GRAY))
-        print(flow_median)        
-
-        for y in range(window_radius * step_y, H-window_radius, step_y):
-            for x in range(window_radius * step_x, W-window_radius, step_x):
-                # calculate mean and compare to current pixel
-                mean = flow[
-                    y-window_radius*step_y : y+window_radius*step_y+1 : step_y, 
-                    x-window_radius*step_x : x+window_radius*step_x+1 : step_x].mean(axis=(0,1))
-                
-                if np.array([.114, .587, .299]).dot(flow[y, x]) < flow_median:
-                    flow[y, x] = mean
-                    print(f'changed {y} {x}')
-
-                difference_map[y // step_y, x // step_x] = self.__color_diff(mean, flow[y,x])
-        
-        difference_map /= 768 # normalization (max value of difference is ~ 767.83)
-        self.detection_threshold = difference_map.max() * 2/6 + difference_map.min() * 4/6
-
-        cv2.imshow('diff map', cv2.resize(difference_map, (difference_map.shape[1] * step_x, difference_map.shape[0] * step_y), interpolation=cv2.INTER_NEAREST))
-        # now we need to detect contours in difference_map - white regions
-        # firstly lets find some big values and then run bfs with smaller threshold from that pixel to expand contour
-        rectangles = []
-        for y in range(H // step_y):
-            for x in range(W // step_x):
-                # ignore black spots
-                if difference_map[y, x] > self.detection_threshold:
-                    rect = self.__inflateRectangle(difference_map, y, x)
-                    rectangles.append(rect)
-        if not rectangles:
-            return np.array([], dtype='int32')
-        rectangles = np.array(rectangles, dtype=float)
-
-        rectangles[:, 0 :: 2] *= step_x # scale to flow size
-        rectangles[:, 1 :: 2] *= step_y
-
-        if self.new_size is not None:
-            rectangles[:, 0 :: 2] *= self.old_size[0] / self.new_size[0] # scale to frame size
-            rectangles[:, 1 :: 2] *= self.old_size[1] / self.new_size[1]
-
-        return rectangles.astype('int32')
+        return self.kmeans.cluster_centers_[labels].reshape(h, w, -1)
         
     def __color_diff(self, c1, c2):
         ''' colors in bgr '''
