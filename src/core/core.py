@@ -8,8 +8,8 @@ from motion_detection.FlowMotionDetector import FlowMotionDetector
 class Core:
     '''Class where all the components come together'''
     def start(self):
-        video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
-        #video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\static2.mp4')
+        #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
+        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\drone_top.mp4')
 
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Changes')
@@ -22,21 +22,20 @@ class Core:
         height, width = frame.shape[:2]
         print("Video resolution: ", height, width)
 
-        md = FlowMotionDetector(frame, n_clusters=4, training_sample_size=6000,
-                                selection_threshold=3/10)
+        md = FlowMotionDetector(frame, selection_threshold=3/10, detection_threshold=0.3)
 
         while True:
             success, frame = video.next_frame()
 
             if success:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                contours, processed_frame = md.detect_motion(gray, return_processed_frame=True)
+                contours = md.detect_motion(gray, return_processed_frame=False)
                 # draw contours
                 for contour in contours:
                     x1,y1,x2,y2 = contour[:4]
                     cv2.rectangle(img=frame, pt1=(x1, y1), pt2=(x2, y2), color=(0, 255, 0), thickness=2)
 
-                grayscaled_window.show_frame(processed_frame)
+                #grayscaled_window.show_frame(processed_frame)
                 original_window.show_frame(frame)
             else: 
                 break
