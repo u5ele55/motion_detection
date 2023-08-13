@@ -9,7 +9,7 @@ class Core:
     '''Class where all the components come together'''
     def start(self):
         #video = VideofileCapturer(r'C:\Users\vshaganov\workplace\tests\trees.mp4')
-        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\drone_top.mp4')
+        video = VideofileCapturer(r'D:\Personal\Job\nic etu\Practic Tasks\trees.mp4')
 
         original_window = FrameDemonstration('Original stream')
         grayscaled_window = FrameDemonstration('Changes')
@@ -26,7 +26,7 @@ class Core:
 
         while True:
             success, frame = video.next_frame()
-
+            
             if success:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 contours = md.detect_motion(gray, return_processed_frame=False)

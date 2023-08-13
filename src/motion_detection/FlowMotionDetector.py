@@ -2,8 +2,6 @@ import numpy as np
 from motion_detection.IMotionDetector import IMotionDetector
 from utilities.geometry import Geometry
 import cv2
-from sklearn.cluster import KMeans
-from sklearn.utils import shuffle
 
 from scipy.signal import medfilt2d
 
@@ -11,12 +9,6 @@ import warnings
 warnings.filterwarnings("error")
 
 MAX_FRAME_RESOLUTION_FLOW = 130_000
-
-class SearchState:
-    none = 0
-    increased = 1
-    decreased = 2
-    increased_second = 3
 
 class FlowMotionDetector(IMotionDetector):
     def __init__(self, sample_frame: np.ndarray, *, 
@@ -75,14 +67,14 @@ class FlowMotionDetector(IMotionDetector):
 
         self.previous = frame
 
-        self.__find_by_magnitude(mag)
+        magnitude_rect = self.__find_by_magnitude(mag)
         self.__find_by_angle(ang, mag)
 
         self.frames_processed += 1
         
         if return_processed_frame:
-            return [], ang
-        return []
+            return magnitude_rect, ang
+        return magnitude_rect
     
     def __find_by_magnitude(self, magn: np.ndarray):
         radius = 1
@@ -93,41 +85,35 @@ class FlowMotionDetector(IMotionDetector):
                 changes[y,x] = abs(magn[y,x] - mean)  # maybe division? 
         
         self.__show_scaled('changes magn', changes, 5)
-        vars = np.zeros_like(changes)
-        eps = 0.2
         
-        # find figures by "increasing, decresing, increasing" factor
-        for y in range(radius, magn.shape[0] - radius):
-            state = SearchState.increased
-            last_mean = 5
-            for x in range(magn.shape[1]):
-                mean = magn[y-radius:y+radius+1, x].mean()
-                if mean < last_mean - eps:
-                    if state == SearchState.increased:
-                        state = SearchState.decreased
-                    elif state == SearchState.increased_second:
-                        state = SearchState.none
-                if mean > last_mean + eps:
-                    if state == SearchState.none:
-                        state = SearchState.increased
-                    elif state == SearchState.decreased:
-                        state = SearchState.increased_second
-                if x == magn.shape[1] - 1 and state == SearchState.decreased:
-                    state = SearchState.increased_second
+        changes_thresh = cv2.adaptiveThreshold((np.clip(magn, 0, 2)*127).astype('uint8'), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -25)
 
-                if state == SearchState.increased_second:
-                    # run figure extraction
-                    vars[y,x] = 1
+        self.__show_scaled('thresh changes magnitude', changes_thresh, 5)
+        
+        rectangles = []
 
-                    pass
+        for y in range(changes_thresh.shape[0]):
+            for x in range(changes_thresh.shape[1]):
+                if changes_thresh[y,x] == 255 and not self.__insideContour(rectangles, y, x):
+                    rect = self.__inflate_thresholded(changes_thresh, changes, y,x)
+                    if rect:
+                        rectangles.append( rect )
+        print(rectangles)
+        if not rectangles:
+            return []
 
-                last_mean = mean
+        rectangles = np.array(rectangles, dtype=float)
 
-        self.__show_scaled('vars', vars, 5)
-        return []
+        rectangles[:, 0 :: 2] *= self.grid_shape[1] # scale to flow size
+        rectangles[:, 1 :: 2] *= self.grid_shape[0]
+
+        if self.new_size is not None:
+            rectangles[:, 0 :: 2] *= self.old_size[0] / self.new_size[0] # scale to frame size
+            rectangles[:, 1 :: 2] *= self.old_size[1] / self.new_size[1]
+
+        return rectangles.astype('int32')
 
     def __find_by_angle(self, angle: np.ndarray, magn: np.ndarray):
-
         angle_diff = lambda a1, a2: min((2 * np.pi) - abs(a1 - a2), abs(a1 - a2))
 
         abobus = np.zeros_like(angle)
@@ -138,9 +124,9 @@ class FlowMotionDetector(IMotionDetector):
                     abobus[y,x] = angle_diff(angle[y,x], angle[y, x-1])
         
         abobus /= np.pi
-        self.__show_scaled('abobus', abobus, 5)
+        self.__show_scaled('X-angle difference', abobus, 5)
 
-    def __inflateRectangle(self, frame: np.ndarray, start_y: int, start_x: int):
+    def __inflate_rectangle(self, frame: np.ndarray, start_y: int, start_x: int, *, thresholded=False, feature_frame=None):
         '''Starting at (x,y), tries to find inner points of figure with BFS, and then fits it into rectangle'''
         rect = [start_x,start_y,start_x,start_y]
 
@@ -167,6 +153,108 @@ class FlowMotionDetector(IMotionDetector):
 
             # part of object
             if frame[y, x] > object_threshold:
+                in_figure = True
+                # update rect
+                if x < rect[0]:
+                    rect[0] = x
+                if y < rect[1]:
+                    rect[1] = y
+                if x > rect[2]:
+                    rect[2] = x
+                if y > rect[3]:
+                    rect[3] = y
+            
+            if not in_figure: 
+                continue
+
+            for step in steps:
+                ny, nx = y+step[0], x+step[1]
+                
+                if in_bounds(ny, nx) and not visited[ny, nx]:
+                    visited[ny, nx] = True
+                    queue.append( (ny, nx) )
+
+        return rect
+    
+    def __inflate_thresholded(self, thresh: np.ndarray, original: np.ndarray, start_y: int, start_x: int):
+        rect = [start_x,start_y,start_x,start_y]
+
+        visited = np.zeros_like(thresh, dtype=bool)
+        grid_height, grid_width = visited.shape
+
+        queue = []
+
+        visited[start_y, start_x] = True
+        queue.append( (start_y, start_x) )
+
+        steps = np.array(
+            [[-1, 0], [1,  0], [0,  1], [0, -1],
+             [-1,-1], [1,  1], [1, -1], [-1, 1]]
+        )
+
+        in_bounds = lambda y, x: 0 <= y < grid_height and 0 <= x < grid_width
+
+        #self.__show_scaled('selection thresh', cv2.threshold(frame, object_threshold, 1, cv2.THRESH_BINARY)[1], 5)
+        sum = [0,0]
+        cnt = 0
+        while queue:
+            y, x = queue.pop(0)
+            in_figure = False
+
+            # part of object
+            if thresh[y, x] == 255:
+                cnt += 1
+
+                in_figure = True
+                # update rect
+                if x < rect[0]:
+                    rect[0] = x
+                if y < rect[1]:
+                    rect[1] = y
+                if x > rect[2]:
+                    rect[2] = x
+                if y > rect[3]:
+                    rect[3] = y
+            
+            if not in_figure: 
+                continue
+
+            for step in steps:
+                ny, nx = y+step[0], x+step[1]
+                
+                if in_bounds(ny, nx) and not visited[ny, nx]:
+                    visited[ny, nx] = True
+                    queue.append( (ny, nx) )
+        if cnt < 3: 
+            return None
+        
+        # looking for a pivot
+        est_y, est_x = round(sum[0] / cnt), round(sum[1] / cnt)
+        if visited[est_y, est_x]:
+            if sum[0] < est_y * cnt:
+                est_y -= 1
+            elif sum[0] > est_y * cnt:
+                est_y += 1
+            
+            if visited[est_y, est_x]:
+                if sum[1] < est_x * cnt:
+                    est_x -= 1
+                elif sum[1] > est_x * cnt:
+                    est_x += 1
+
+                if visited[est_y, est_x]:
+                    return rect
+                
+        # inflate from (est_y, est_x)
+        queue.append( (est_y, est_x) )
+        object_threshold = max(original.max() * self.selection_threshold, 0.05)
+
+        while queue:
+            y, x = queue.pop(0)
+            in_figure = False
+
+            # part of object
+            if original[y, x] > object_threshold:
                 in_figure = True
                 # update rect
                 if x < rect[0]:
